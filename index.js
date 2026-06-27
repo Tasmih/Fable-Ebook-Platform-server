@@ -1928,7 +1928,87 @@ app.get(
 );
 
 // admin analytics
+app.get("/api/admin/analytics", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const transactions = await transactionsCollection.find({}).toArray();
 
+    const monthlySalesMap = {};
+
+    transactions.forEach((item) => {
+      const date = item.createdAt || item.purchaseDate || new Date();
+
+      const month = new Date(date).toLocaleString("en-US", {
+        month: "short",
+        year: "numeric",
+      });
+
+      if (!monthlySalesMap[month]) {
+        monthlySalesMap[month] = 0;
+      }
+
+      monthlySalesMap[month] += Number(item.amount || item.price || 0);
+    });
+
+    const monthlySales = Object.keys(monthlySalesMap).map((month) => ({
+      month,
+      revenue: monthlySalesMap[month],
+    }));
+
+    const genreData = await ebooksCollection
+      .aggregate([
+        {
+          $match: {
+            isDeleted: { $ne: true },
+          },
+        },
+        {
+          $group: {
+            _id: "$genre",
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            genre: "$_id",
+            count: 1,
+          },
+        },
+      ])
+      .toArray();
+
+    const paymentTypeData = await transactionsCollection
+      .aggregate([
+        {
+          $group: {
+            _id: "$type",
+            count: { $sum: 1 },
+            revenue: { $sum: "$amount" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            type: "$_id",
+            count: 1,
+            revenue: 1,
+          },
+        },
+      ])
+      .toArray();
+
+    res.send({
+      monthlySales,
+      genreData,
+      paymentTypeData,
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "failed to load admin analytics",
+      error: error.message,
+    });
+  }
+});
 
    // await client.db("admin").command({ ping: 1 });
     console.log("mongodb connected successfully");
