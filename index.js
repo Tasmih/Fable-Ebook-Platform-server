@@ -1603,14 +1603,7 @@ const ebook = await ebooksCollection.findOne({
   
   // ADMIN ROUTES
 
-// admin role check
-const verifyAdmin = async (req, res, next) => {
-  if (req.user?.role !== "admin") {
-    return res.status(403).send({ message: "forbidden access" });
-  }
 
-  next();
-};
 
 // admin overview
 app.get("/api/admin/overview", verifyToken, verifyAdmin, async (req, res) => {
