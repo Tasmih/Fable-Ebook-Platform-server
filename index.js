@@ -1909,8 +1909,7 @@ app.delete("/api/admin/ebooks/:id", verifyToken, verifyAdmin, async (req, res) =
 });
 
 // admin all transactions
-app.get(
-  "/api/admin/transactions",verifyToken,verifyAdmin,async (req, res) => {
+app.get("/api/admin/transactions",verifyToken,verifyAdmin,async (req, res) => {
     try {
       const transactions = await transactionsCollection
         .find({})
