@@ -1603,89 +1603,17 @@ const ebook = await ebooksCollection.findOne({
   
   // ADMIN ROUTES
 
+// admin role check
+const verifyAdmin = async (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).send({ message: "forbidden access" });
+  }
 
+  next();
+};
 
 // admin overview
-app.get("/api/admin/overview", verifyToken, verifyAdmin, async (req, res) => {
-  try {
-    const totalUsers = await usersCollection.countDocuments();
 
-    const totalReaders = await usersCollection.countDocuments({
-      role: "user",
-    });
-
-    const totalWriters = await usersCollection.countDocuments({
-      role: "writer",
-    });
-
-    const totalAdmins = await usersCollection.countDocuments({
-      role: "admin",
-    });
-
-    const totalEbooks = await ebooksCollection.countDocuments({
-      isDeleted: { $ne: true },
-    });
-
-    const publishedEbooks = await ebooksCollection.countDocuments({
-      status: "published",
-      isDeleted: { $ne: true },
-    });
-
-    const unpublishedEbooks = await ebooksCollection.countDocuments({
-      status: "unpublished",
-      isDeleted: { $ne: true },
-    });
-
-    const transactions = await transactionsCollection
-      .find({})
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    const totalTransactions = transactions.length;
-
-    const totalRevenue = transactions.reduce((sum, item) => {
-      return sum + Number(item.amount || item.price || 0);
-    }, 0);
-
-    const purchaseTransactions = transactions.filter((item) => {
-      return item.type === "purchase" && item.status === "paid";
-    });
-
-    const totalSold = purchaseTransactions.length;
-
-    const recentTransactions = transactions.slice(0, 5).map((item) => ({
-      _id: item._id,
-      transactionId: item.transactionId || item.stripeSessionId || "",
-      type: item.type || "purchase",
-      userEmail: item.userEmail || item.buyerEmail || "",
-      buyerEmail: item.buyerEmail || "",
-      writerEmail: item.writerEmail || "",
-      ebookTitle: item.ebookTitle || "N/A",
-      amount: Number(item.amount || item.price || 0),
-      status: item.status || "paid",
-      createdAt: item.createdAt || item.purchaseDate,
-    }));
-
-    res.send({
-      totalUsers,
-      totalReaders,
-      totalWriters,
-      totalAdmins,
-      totalEbooks,
-      publishedEbooks,
-      unpublishedEbooks,
-      totalTransactions,
-      totalRevenue,
-      totalSold,
-      recentTransactions,
-    });
-  } catch (error) {
-    res.status(500).send({
-      message: "failed to load admin overview",
-      error: error.message,
-    });
-  }
-});
 
 // admin users list
 app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
