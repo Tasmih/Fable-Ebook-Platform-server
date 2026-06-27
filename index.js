@@ -1574,18 +1574,36 @@ const ebook = await ebooksCollection.findOne({
       }
     });
 
- 
+    // user action: get purchase history
+    app.get("/api/users/purchase-history", async (req, res) => {
+      try {
+        const email = normalizeEmail(req.query.email);
+
+        if (!email) {
+          return res.status(400).send({ message: "email is required" });
+        }
+
+        const transactions = await transactionsCollection
+          .find({
+            buyerEmail: email,
+            type: "purchase",
+          })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(transactions);
+      } catch (err) {
+        res.status(500).send({
+          message: "failed to load purchase history",
+          error: err.message,
+        });
+      }
+    });
+
   
   // ADMIN ROUTES
 
-// admin role check
-const verifyAdmin = async (req, res, next) => {
-  if (req.user?.role !== "admin") {
-    return res.status(403).send({ message: "forbidden access" });
-  }
 
-  next();
-};
 
 // admin overview
 app.get("/api/admin/overview", verifyToken, verifyAdmin, async (req, res) => {
