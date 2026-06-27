@@ -1259,84 +1259,7 @@ const ebook = await ebooksCollection.findOne({
     });
 
     // payment action: create stripe checkout session
-    app.post("/api/payment/create-checkout", async (req, res) => {
-      try {
-        if (!stripe) {
-          return res.status(500).send({
-            message: "stripe secret key is missing",
-          });
-        }
-
-        const { ebookId, userEmail } = req.body;
-        const email = normalizeEmail(userEmail);
-
-        if (!ebookId || !email) {
-          return res.status(400).send({
-            message: "ebookId and userEmail are required",
-          });
-        }
-
-        if (!ObjectId.isValid(ebookId)) {
-          return res.status(400).send({ message: "invalid ebook id" });
-        }
-
-        const ebook = await ebooksCollection.findOne({
-          _id: new ObjectId(ebookId),
-        });
-
-        if (!ebook) {
-          return res.status(404).send({ message: "ebook not found" });
-        }
-
-        // writer cannot buy own ebook
-        if (ebook.writerEmail === email) {
-          return res.status(400).send({
-            message: "you cannot purchase your own ebook",
-          });
-        }
-
-        const user = await usersCollection.findOne({ email });
-
-        if (user?.purchasedEbooks?.includes(ebookId)) {
-          return res.status(400).send({
-            message: "already purchased",
-          });
-        }
-
-        const session = await stripe.checkout.sessions.create({
-          payment_method_types: ["card"],
-          customer_email: email,
-          line_items: [
-            {
-              price_data: {
-                currency: "usd",
-                product_data: {
-                  name: ebook.title,
-                  images: ebook.coverImage ? [ebook.coverImage] : [],
-                },
-                unit_amount: Math.round(Number(ebook.price) * 100),
-              },
-              quantity: 1,
-            },
-          ],
-          mode: "payment",
-          success_url: `${process.env.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${process.env.CLIENT_URL}/ebooks/${ebookId}`,
-          metadata: {
-            ebookId,
-            userEmail: email,
-            writerEmail: ebook.writerEmail,
-          },
-        });
-
-        res.send({ url: session.url });
-      } catch (err) {
-        res.status(500).send({
-          message: "failed to create checkout session",
-          error: err.message,
-        });
-      }
-    });
+  
 
     // payment action: verify stripe payment and save purchase
     app.get("/api/payment/success", async (req, res) => {
@@ -1927,7 +1850,87 @@ app.get("/api/admin/transactions",verifyToken,verifyAdmin,async (req, res) => {
 );
 
 // admin analytics
+app.get("/api/admin/analytics", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const transactions = await transactionsCollection.find({}).toArray();
 
+    const monthlySalesMap = {};
+
+    transactions.forEach((item) => {
+      const date = item.createdAt || item.purchaseDate || new Date();
+
+      const month = new Date(date).toLocaleString("en-US", {
+        month: "short",
+        year: "numeric",
+      });
+
+      if (!monthlySalesMap[month]) {
+        monthlySalesMap[month] = 0;
+      }
+
+      monthlySalesMap[month] += Number(item.amount || item.price || 0);
+    });
+
+    const monthlySales = Object.keys(monthlySalesMap).map((month) => ({
+      month,
+      revenue: monthlySalesMap[month],
+    }));
+
+    const genreData = await ebooksCollection
+      .aggregate([
+        {
+          $match: {
+            isDeleted: { $ne: true },
+          },
+        },
+        {
+          $group: {
+            _id: "$genre",
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            genre: "$_id",
+            count: 1,
+          },
+        },
+      ])
+      .toArray();
+
+    const paymentTypeData = await transactionsCollection
+      .aggregate([
+        {
+          $group: {
+            _id: "$type",
+            count: { $sum: 1 },
+            revenue: { $sum: "$amount" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            type: "$_id",
+            count: 1,
+            revenue: 1,
+          },
+        },
+      ])
+      .toArray();
+
+    res.send({
+      monthlySales,
+      genreData,
+      paymentTypeData,
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "failed to load admin analytics",
+      error: error.message,
+    });
+  }
+});
 
    // await client.db("admin").command({ ping: 1 });
     console.log("mongodb connected successfully");
